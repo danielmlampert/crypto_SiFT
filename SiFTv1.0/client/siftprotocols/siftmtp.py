@@ -1,6 +1,8 @@
 #python3
 
 import socket
+from Crypto.Cipher import AES
+from Crypto import Random
 
 class SiFT_MTP_Error(Exception):
 
@@ -14,11 +16,14 @@ class SiFT_MTP:
 		# --------- CONSTANTS ------------
 		self.version_major = 0
 		self.version_minor = 5
-		self.msg_hdr_ver = b'\x00\x05'
-		self.size_msg_hdr = 6
+		self.msg_hdr_ver = b'\x01\x00'
+		self.size_msg_hdr = 16
 		self.size_msg_hdr_ver = 2
 		self.size_msg_hdr_typ = 2
 		self.size_msg_hdr_len = 2
+		self.size_msg_hdr_sqn = 2
+		self.size_msg_hdr_rnd = 6
+		self.size_msg_hdr_rsv = 2
 		self.type_login_req =    b'\x00\x00'
 		self.type_login_res =    b'\x00\x10'
 		self.type_command_req =  b'\x01\x00'
@@ -33,6 +38,10 @@ class SiFT_MTP:
 						  self.type_command_req, self.type_command_res,
 						  self.type_upload_req_0, self.type_upload_req_1, self.type_upload_res,
 						  self.type_dnload_req, self.type_dnload_res_0, self.type_dnload_res_1)
+		self.hdr_sqn = b'\x00\x01'
+		self.hdr_rsv = b'\x00\x00'
+		self.size_msg_mac = 12
+		self.size_msg_etk = 256
 		# --------- STATE ------------
 		self.peer_socket = peer_socket
 
@@ -43,7 +52,10 @@ class SiFT_MTP:
 		parsed_msg_hdr, i = {}, 0
 		parsed_msg_hdr['ver'], i = msg_hdr[i:i+self.size_msg_hdr_ver], i+self.size_msg_hdr_ver 
 		parsed_msg_hdr['typ'], i = msg_hdr[i:i+self.size_msg_hdr_typ], i+self.size_msg_hdr_typ
-		parsed_msg_hdr['len'] = msg_hdr[i:i+self.size_msg_hdr_len]
+		parsed_msg_hdr['len'], i = msg_hdr[i:i+self.size_msg_hdr_len], i+self.size_msg_hdr_len
+		parsed_msg_hdr['sqn'], i = msg_hdr[i:i+self.size_msg_hdr_sqn], i+self.size_msg_hdr_sqn
+		parsed_msg_hdr['rnd'], i = msg_hdr[i:i+self.size_msg_hdr_rnd], i+self.size_msg_hdr_rnd
+		parsed_msg_hdr['rsv'] = msg_hdr[i:i+self.size_msg_hdr_rsv]
 		return parsed_msg_hdr
 
 
@@ -116,6 +128,17 @@ class SiFT_MTP:
 	# builds and sends message of a given type using the provided payload
 	def send_msg(self, msg_type, msg_payload):
 		
+		if msg_type == self.type_login_req:
+			header_rnd = Random.get_random_bytes(6)
+			tk = Random.get_random_bytes(32)
+			msg_size = self.size_msg_hdr + len(msg_payload) + self.size_msg_mac + self.size_msg_etk
+			msg_hdr_len = msg_size.to_bytes(self.size_msg_hdr_len, byteorder='big')
+			msg_hdr = self.msg_hdr_ver + msg_type + 
+
+
+
+
+
 		# build message
 		msg_size = self.size_msg_hdr + len(msg_payload)
 		msg_hdr_len = msg_size.to_bytes(self.size_msg_hdr_len, byteorder='big')
