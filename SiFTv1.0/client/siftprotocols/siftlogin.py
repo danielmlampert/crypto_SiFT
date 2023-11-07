@@ -198,6 +198,6 @@ class SiFT_LOGIN:
         init_key_material = login_req_struct['client_random'] + login_res_struct['server_random']
         salt = login_res_struct['request_hash']
 
-        return HKDF(init_key_material, 32, salt, SHA256)
-
+        # update final transfer key
+        self.mtp.setTransferKey = HKDF(init_key_material, 32, salt, SHA256)
 
