@@ -3,6 +3,8 @@
 import time
 from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Protocol.KDF import HKDF
+from Crypto import Random
 from siftprotocols.siftmtp import SiFT_MTP, SiFT_MTP_Error
 
 
@@ -13,7 +15,6 @@ class SiFT_LOGIN_Error(Exception):
 
 class SiFT_LOGIN:
     def __init__(self, mtp):
-
         self.DEBUG = True
         # --------- CONSTANTS ------------
         self.delimiter = '\n'
@@ -31,8 +32,11 @@ class SiFT_LOGIN:
     # builds a login request from a dictionary
     def build_login_req(self, login_req_struct):
 
-        login_req_str = login_req_struct['username']
+        login_req_str = login_req_struct['timestamp']
+        login_req_str += self.delimiter + login_req_struct['username'] 
         login_req_str += self.delimiter + login_req_struct['password'] 
+        login_req_str += self.delimiter + login_req_struct['client_random'] 
+
         return login_req_str.encode(self.coding)
 
 
@@ -41,8 +45,10 @@ class SiFT_LOGIN:
 
         login_req_fields = login_req.decode(self.coding).split(self.delimiter)
         login_req_struct = {}
-        login_req_struct['username'] = login_req_fields[0]
-        login_req_struct['password'] = login_req_fields[1]
+        login_req_struct['timestamp'] = login_req_fields[0]
+        login_req_struct['username'] = login_req_fields[1]
+        login_req_struct['password'] = login_req_fields[2]
+        login_req_struct['client_random'] = login_req_fields[3]
         return login_req_struct
 
 
@@ -50,6 +56,7 @@ class SiFT_LOGIN:
     def build_login_res(self, login_res_struct):
 
         login_res_str = login_res_struct['request_hash'].hex() 
+        login_res_str = self.delimiter + login_res_str['server_random'].hex()
         return login_res_str.encode(self.coding)
 
 
@@ -58,6 +65,7 @@ class SiFT_LOGIN:
         login_res_fields = login_res.decode(self.coding).split(self.delimiter)
         login_res_struct = {}
         login_res_struct['request_hash'] = bytes.fromhex(login_res_fields[0])
+        login_res_struct['server_random'] = bytes.fromhex(login_res_fields[1])
         return login_res_struct
 
 
@@ -98,8 +106,11 @@ class SiFT_LOGIN:
 
         login_req_struct = self.parse_login_req(msg_payload)
 
-        # checking username and password
-        if login_req_struct['username'] in self.server_users:
+        # checking timestamp, username, password
+        # TODO:  the server should also check if the same request was not recieved in another connection (with another client) within the acceptance time window around the current time at the server.
+        if abs(login_req_struct['timestamp'] - time.time_ns()) < 1e+9:
+            if not login_req_struct['username'] in self.server_users:
+                raise SiFT_LOGIN_Error('Username verification failed')
             if not self.check_password(login_req_struct['password'], self.server_users[login_req_struct['username']]):
                 raise SiFT_LOGIN_Error('Password verification failed')
         else:
@@ -108,6 +119,7 @@ class SiFT_LOGIN:
         # building login response
         login_res_struct = {}
         login_res_struct['request_hash'] = request_hash
+        login_res_struct['server_random'] = Random.get_random_bytes(16) 
         msg_payload = self.build_login_res(login_res_struct)
 
         # DEBUG 
@@ -136,8 +148,10 @@ class SiFT_LOGIN:
 
         # building a login request
         login_req_struct = {}
+        login_req_struct['timestamp'] = time.time_ns()
         login_req_struct['username'] = username
         login_req_struct['password'] = password
+        login_req_struct['client_random'] = Random.get_random_bytes(16) 
         msg_payload = self.build_login_req(login_req_struct)
 
         # DEBUG 
@@ -180,4 +194,10 @@ class SiFT_LOGIN:
         # checking request_hash receiveid in the login response
         if login_res_struct['request_hash'] != request_hash:
             raise SiFT_LOGIN_Error('Verification of login response failed')
+        
+        init_key_material = login_req_struct['client_random'] + login_res_struct['server_random']
+        salt = login_res_struct['request_hash']
+
+        return HKDF(init_key_material, 32, salt, SHA256)
+
 
