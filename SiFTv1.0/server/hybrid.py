@@ -29,7 +29,6 @@ def load_publickey(pubkeyfile):
         print('Error: Cannot import public key from file ' + pubkeyfile)
         sys.exit(1)
 
-
 def load_keypair(privkeyfile):
     passphrase = getpass.getpass('Enter a passphrase to decode the saved private key: ')
     with open(privkeyfile, 'rb') as f:
