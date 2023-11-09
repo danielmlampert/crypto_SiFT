@@ -1,8 +1,10 @@
 #python3
 
 import socket
-from Crypto.Cipher import AES
+from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto import Random
+from Crypto.PublicKey import RSA
+from Crypto.Util import Padding
 
 class SiFT_MTP_Error(Exception):
 
@@ -38,13 +40,20 @@ class SiFT_MTP:
 						  self.type_command_req, self.type_command_res,
 						  self.type_upload_req_0, self.type_upload_req_1, self.type_upload_res,
 						  self.type_dnload_req, self.type_dnload_res_0, self.type_dnload_res_1)
-		self.hdr_sqn = b'\x00\x01'
 		self.hdr_rsv = b'\x00\x00'
 		self.size_msg_mac = 12
 		self.size_msg_etk = 256
 		# --------- STATE ------------
 		self.peer_socket = peer_socket
+		self.hdr_sqn = b'\x00\x00'
 
+	def load_publickey(pubkeyfile):
+		with open(pubkeyfile, 'rb') as f:
+			pubkeystr = f.read()
+		try:
+			return RSA.import_key(pubkeystr)
+		except:
+			raise SiFT_MTP_Error('Cannot import public key from file ' + pubkeyfile)
 
 	# parses a message header and returns a dictionary containing the header fields
 	def parse_msg_header(self, msg_hdr):
@@ -128,21 +137,29 @@ class SiFT_MTP:
 	# builds and sends message of a given type using the provided payload
 	def send_msg(self, msg_type, msg_payload):
 		
+		# build login header
 		if msg_type == self.type_login_req:
 			header_rnd = Random.get_random_bytes(6)
+			# do I store this locally yet?
 			tk = Random.get_random_bytes(32)
 			msg_size = self.size_msg_hdr + len(msg_payload) + self.size_msg_mac + self.size_msg_etk
 			msg_hdr_len = msg_size.to_bytes(self.size_msg_hdr_len, byteorder='big')
-			msg_hdr = self.msg_hdr_ver + msg_type + 
+			# do I increment sqn?
+			msg_hdr = self.msg_hdr_ver + msg_type + msg_hdr_len + self.hdr_sqn + header_rnd + self.hdr_rsv
 
+		# encrypt payload and generate MAC
+		nonce = self.hdr_sqn + header_rnd
+		AE = AES.new(tk, AES.MODE_GCM, nonce=nonce, mac_len=self.size_msg_mac)
+		AE.update(tk)
+		encrypted_payload, authtag = AE.encrypt_and_digest(msg_payload)
 
-
-
+		# encrypt tk with RSA
+		pubkey = self.load_publickey("../pubkey.pem")
+		RSAcipher = PKCS1_OAEP.new(pubkey)
+		etk = RSAcipher.encrypt(tk)
 
 		# build message
-		msg_size = self.size_msg_hdr + len(msg_payload)
-		msg_hdr_len = msg_size.to_bytes(self.size_msg_hdr_len, byteorder='big')
-		msg_hdr = self.msg_hdr_ver + msg_type + msg_hdr_len
+		
 
 		# DEBUG 
 		if self.DEBUG:
@@ -158,5 +175,6 @@ class SiFT_MTP:
 			self.send_bytes(msg_hdr + msg_payload)
 		except SiFT_MTP_Error as e:
 			raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
+
 
 
