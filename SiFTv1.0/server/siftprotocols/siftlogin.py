@@ -108,7 +108,7 @@ class SiFT_LOGIN:
 
         # checking timestamp, username, password
         # TODO:  the server should also check if the same request was not recieved in another connection (with another client) within the acceptance time window around the current time at the server.
-        if abs(login_req_struct['timestamp'] - time.time_ns()) < 1e+9:
+        if abs(int(login_req_struct['timestamp']) - time.time_ns()) < 1e+9:
             if not login_req_struct['username'] in self.server_users:
                 raise SiFT_LOGIN_Error('Username verification failed')
             if not self.check_password(login_req_struct['password'], self.server_users[login_req_struct['username']]):

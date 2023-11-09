@@ -107,8 +107,8 @@ class SiFT_MTP:
 		
 		try:
 			received_sqn = int.from_bytes(parsed_msg_hdr['sqn'], byteorder='big')
-			if received_sqn <= self.hdr_sqn_rcv:
-				# how to close connection silently??
+			current_sqn = int.from_bytes(self.hdr_sqn_rcv, byteorder='big')
+			if received_sqn <= current_sqn:
 				raise SiFT_MTP_Error('')
 		except:
 			raise SiFT_MTP_Error('Invalid SQN format in header')
@@ -134,11 +134,11 @@ class SiFT_MTP:
 		if len(msg_body) != msg_len - self.size_msg_hdr: 
 			raise SiFT_MTP_Error('Incomplete message body received')
 
-		size_enc_payload = msg_len - len(msg_hdr) - self.size_msg_mac
+		size_enc_plaintext = len(msg_body) - self.size_msg_mac
 
 		# handle login_req
 		if parsed_msg_hdr['typ'] == self.type_login_req:
-			size_enc_payload -= self.size_msg_etk
+			size_enc_plaintext -= self.size_msg_etk
 			# decrypt etk
 			try: 
 				etk = msg_body[-256:]
@@ -149,9 +149,9 @@ class SiFT_MTP:
 			RSAcipher = PKCS1_OAEP.new(keypair)
 			self.transfer_key = RSAcipher.decrypt(etk)
 
-		# parse body
-		msg_body_enc_payload = msg_body[:size_enc_payload]
-		msg_body_mac = msg_body[size_enc_payload:size_enc_payload+self.size_msg_mac]
+		# parse mac
+		msg_enc_payload = msg_body[:size_enc_plaintext]
+		msg_body_mac = msg_body[size_enc_plaintext:size_enc_plaintext+self.size_msg_mac]
 
 		# verify MAC
 		nonce = parsed_msg_hdr['sqn'] + parsed_msg_hdr['rnd']
@@ -159,7 +159,7 @@ class SiFT_MTP:
 		# do I need this??
 		AE.update(msg_hdr)
 		try:
-			payload = AE.decrypt_and_verify(msg_body_enc_payload, msg_body_mac)
+			payload = AE.decrypt_and_verify(msg_enc_payload, msg_body_mac)
 		except Exception as e:
 			raise SiFT_MTP_Error('Invalid message construction')
 		
@@ -195,19 +195,19 @@ class SiFT_MTP:
 			pubkey = load_publickey(self.publickey_path)
 			RSAcipher = PKCS1_OAEP.new(pubkey)
 			etk = RSAcipher.encrypt(tk)
-		
+
 		msg_hdr_len = msg_size.to_bytes(self.size_msg_hdr_len, byteorder='big')
 
 		# bigger SQN
 		biggerInt = int.from_bytes(self.hdr_sqn_snd, byteorder='big') + 1
-		biggerSQN = biggerInt.to_bytes(self.size_msg_hdr_sqn_snd, byteorder='big')
+		biggerSQN = biggerInt.to_bytes(self.size_msg_hdr_sqn, byteorder='big')
 		# concatenate header
 		msg_hdr = self.msg_hdr_ver + msg_type + msg_hdr_len + biggerSQN + header_rnd + self.hdr_rsv
 
 		# encrypt payload and generate MAC
-		nonce = self.hdr_sqn_snd + header_rnd
+		nonce = biggerSQN + header_rnd
 		AE = AES.new(tk, AES.MODE_GCM, nonce=nonce, mac_len=self.size_msg_mac)
-		AE.update(tk)
+		AE.update(msg_hdr)
 		encrypted_payload, authtag = AE.encrypt_and_digest(msg_payload)
 
 		# build message
@@ -234,6 +234,3 @@ class SiFT_MTP:
 		
 		# store higher sqn_snd
 		self.hdr_sqn_snd = biggerSQN
-
-
-
