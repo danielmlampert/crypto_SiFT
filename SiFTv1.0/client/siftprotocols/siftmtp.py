@@ -169,7 +169,7 @@ class SiFT_MTP:
 		nonce = parsed_msg_hdr['sqn'] + parsed_msg_hdr['rnd']
 		AE = AES.new(self.transfer_key, AES.MODE_GCM, nonce=nonce, mac_len=self.size_msg_mac)
 		# do I need this??
-		# AE.update(header)
+		AE.update(msg_hdr)
 		try:
 			payload = AE.decrypt_and_verify(msg_body_enc_payload, msg_body_mac)
 		except Exception as e:
