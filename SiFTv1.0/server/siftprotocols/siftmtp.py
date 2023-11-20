@@ -121,15 +121,6 @@ class SiFT_MTP:
 			msg_body = self.receive_bytes(msg_len - self.size_msg_hdr)
 		except SiFT_MTP_Error as e:
 			raise SiFT_MTP_Error('Unable to receive message body --> ' + e.err_msg)
-		
-		# DEBUG 
-		if self.DEBUG:
-			print('MTP message received (' + str(msg_len) + '):')
-			print('HDR (' + str(len(msg_hdr)) + '): ' + msg_hdr.hex())
-			print('BDY (' + str(len(msg_body)) + '): ')
-			print(msg_body.hex())
-			print('------------------------------------------')
-		# DEBUG 
 
 		if len(msg_body) != msg_len - self.size_msg_hdr: 
 			raise SiFT_MTP_Error('Incomplete message body received')
@@ -144,14 +135,30 @@ class SiFT_MTP:
 				etk = msg_body[-256:]
 			except:
 				raise SiFT_MTP_Error('Incomplete message received')
-			
-			keypair = load_keypair(self.keypair_path)
-			RSAcipher = PKCS1_OAEP.new(keypair)
-			self.transfer_key = RSAcipher.decrypt(etk)
+			try:
+				keypair = load_keypair(self.keypair_path)
+				RSAcipher = PKCS1_OAEP.new(keypair)
+				self.transfer_key = RSAcipher.decrypt(etk)
+				print("DECRYPTED TRANSFER: " + self.transfer_key.hex())
+			except:
+				raise SiFT_MTP_Error('Error decrypting temporary transfer key')
 
 		# parse mac
 		msg_enc_payload = msg_body[:size_enc_plaintext]
 		msg_body_mac = msg_body[size_enc_plaintext:size_enc_plaintext+self.size_msg_mac]
+
+		# DEBUG 
+		if self.DEBUG:
+			print('MTP message received (' + str(msg_len) + '):')
+			print('HDR (' + str(len(msg_hdr)) + '): ' + msg_hdr.hex())
+			print('EPD (' + str(len(msg_enc_payload)) + '): ')
+			print(msg_enc_payload.hex())
+			print('MAC (' + str(len(msg_body_mac)) + '): ')
+			print(msg_body_mac.hex())
+			print('TK (' + str(len(self.transfer_key)) + '): ')
+			print(self.transfer_key.hex())
+			print('------------------------------------------')
+		# DEBUG 
 
 		# verify MAC
 		nonce = parsed_msg_hdr['sqn'] + parsed_msg_hdr['rnd']
@@ -189,12 +196,14 @@ class SiFT_MTP:
 		# additional for login_req
 		if msg_type == self.type_login_req:
 			tk = Random.get_random_bytes(32)
+			self.transfer_key = tk
 			msg_size += self.size_msg_etk
 			
 			# encrypt tk with RSA
 			pubkey = load_publickey(self.publickey_path)
 			RSAcipher = PKCS1_OAEP.new(pubkey)
 			etk = RSAcipher.encrypt(tk)
+
 
 		msg_hdr_len = msg_size.to_bytes(self.size_msg_hdr_len, byteorder='big')
 
@@ -221,8 +230,15 @@ class SiFT_MTP:
 		if self.DEBUG:
 			print('MTP message to send (' + str(msg_size) + '):')
 			print('HDR (' + str(len(msg_hdr)) + '): ' + msg_hdr.hex())
-			print('BDY (' + str(len(msg_body)) + '): ')
-			print(msg_body.hex())
+			print('EPD (' + str(len(encrypted_payload)) + '): ')
+			print(encrypted_payload.hex())
+			print('MAC (' + str(len(authtag)) + '): ')
+			print(authtag.hex())
+			if msg_type == self.type_login_req:
+				print('ETK (' + str(len(etk)) + '): ')
+				print(etk.hex())
+			print('TK (' + str(len(self.transfer_key)) + '): ')
+			print(self.transfer_key.hex())
 			print('------------------------------------------')
 		# DEBUG 
 
