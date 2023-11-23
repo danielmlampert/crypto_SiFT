@@ -35,7 +35,7 @@ class SiFT_LOGIN:
         login_req_str = login_req_struct['timestamp']
         login_req_str += self.delimiter + login_req_struct['username'] 
         login_req_str += self.delimiter + login_req_struct['password'] 
-        login_req_str += self.delimiter + login_req_struct['client_random'] 
+        login_req_str += self.delimiter + login_req_struct['client_random'].hex() 
 
         return login_req_str.encode(self.coding)
 
@@ -48,15 +48,19 @@ class SiFT_LOGIN:
         login_req_struct['timestamp'] = login_req_fields[0]
         login_req_struct['username'] = login_req_fields[1]
         login_req_struct['password'] = login_req_fields[2]
-        login_req_struct['client_random'] = login_req_fields[3]
+        login_req_struct['client_random'] = bytes.fromhex(login_req_fields[3])
         return login_req_struct
 
 
     # builds a login response from a dictionary
     def build_login_res(self, login_res_struct):
 
-        login_res_str = login_res_struct['request_hash'].hex() 
-        login_res_str = self.delimiter + login_res_str['server_random'].hex()
+        if self.DEBUG:
+            print('request hash type: ', type(login_res_struct['request_hash']))
+            print('server random type: ', type(login_res_struct['server_random']))
+
+        login_res_str = login_res_struct['request_hash']
+        login_res_str += self.delimiter + login_res_struct['server_random'].hex()
         return login_res_str.encode(self.coding)
 
 
@@ -64,8 +68,12 @@ class SiFT_LOGIN:
     def parse_login_res(self, login_res):
         login_res_fields = login_res.decode(self.coding).split(self.delimiter)
         login_res_struct = {}
-        login_res_struct['request_hash'] = bytes.fromhex(login_res_fields[0])
+        # login_res_struct['request_hash'] = bytes.fromhex(login_res_fields[0])
+        # login_res_struct['server_random'] = bytes.fromhex(login_res_fields[1])
+        login_res_struct['request_hash'] = login_res_fields[0]
         login_res_struct['server_random'] = bytes.fromhex(login_res_fields[1])
+        if self.DEBUG:
+            print("server_random type: ", type(login_res_struct['server_random']))
         return login_res_struct
 
 
@@ -76,7 +84,13 @@ class SiFT_LOGIN:
         if pwdhash == usr_struct['pwdhash']: return True
         return False
 
+    def calculateTransfer(self, login_req_struct, login_res_struct):
+        init_key_material = login_req_struct['client_random'] + login_res_struct['server_random']
+        salt = bytes.fromhex(login_res_struct['request_hash'])
 
+        # update final transfer key
+        self.mtp.setTransferKey(HKDF(init_key_material, 32, salt, SHA256))
+    
     # handles login process (to be used by the server)
     def handle_login_server(self):
 
@@ -118,8 +132,8 @@ class SiFT_LOGIN:
 
         # building login response
         login_res_struct = {}
-        login_res_struct['request_hash'] = request_hash
-        login_res_struct['server_random'] = Random.get_random_bytes(16) 
+        login_res_struct['request_hash'] = request_hash.hex()
+        login_res_struct['server_random'] = Random.get_random_bytes(16)
         msg_payload = self.build_login_res(login_res_struct)
 
         # DEBUG 
@@ -140,6 +154,7 @@ class SiFT_LOGIN:
             print('User ' + login_req_struct['username'] + ' logged in')
         # DEBUG 
 
+        self.calculateTransfer(login_req_struct, login_res_struct)
         return login_req_struct['username']
 
 
@@ -151,7 +166,7 @@ class SiFT_LOGIN:
         login_req_struct['timestamp'] = str(time.time_ns())
         login_req_struct['username'] = str(username)
         login_req_struct['password'] = str(password)
-        login_req_struct['client_random'] = str(Random.get_random_bytes(16))
+        login_req_struct['client_random'] = Random.get_random_bytes(16)
         msg_payload = self.build_login_req(login_req_struct)
 
         # DEBUG 
@@ -192,12 +207,17 @@ class SiFT_LOGIN:
         login_res_struct = self.parse_login_res(msg_payload)
 
         # checking request_hash receiveid in the login response
-        if login_res_struct['request_hash'] != request_hash:
+        if login_res_struct['request_hash'] != request_hash.hex():
             raise SiFT_LOGIN_Error('Verification of login response failed')
         
-        init_key_material = login_req_struct['client_random'] + login_res_struct['server_random']
-        salt = login_res_struct['request_hash']
+        if self.DEBUG:
+            print("client random type: ", type(login_req_struct['client_random']))
+            print("server random type: ", type(login_res_struct['server_random']))
 
-        # update final transfer key
-        self.mtp.setTransferKey = HKDF(init_key_material, 32, salt, SHA256)
+        # init_key_material = login_req_struct['client_random'] + login_res_struct['server_random']
+        # salt = bytes.fromhex(login_res_struct['request_hash'])
+
+        # # update final transfer key
+        # self.mtp.setTransferKey(HKDF(init_key_material, 32, salt, SHA256))
+        self.calculateTransfer(login_req_struct, login_res_struct)
 
