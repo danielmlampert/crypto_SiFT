@@ -9,16 +9,12 @@ from Crypto import Random
 
 def genKeypair():
     keypair = RSA.generate(2048)
-    save_publickey(keypair.publickey(), 'client/pubkey.pem')
-    save_keypair(keypair, 'server/keypair.pem')
+    save_publickey(keypair.publickey(), '../client/pubkey.pem')
+    save_keypair(keypair, 'keypair.pem')
 
 def save_publickey(pubkey, pubkeyfile):
     with open(pubkeyfile, 'wb') as f:
-        f.write(pubkey.export_key(format='PEM')) 
-
-def save_keypair(keypair, privkeyfile):
-    with open(privkeyfile, 'wb') as f:
-        f.write(keypair.export_key(format='PEM'))
+        f.write(pubkey.export_key(format='PEM'))
 
 def load_publickey(pubkeyfile):
     with open(pubkeyfile, 'rb') as f:
@@ -29,11 +25,18 @@ def load_publickey(pubkeyfile):
         print('Error: Cannot import public key from file ' + pubkeyfile)
         sys.exit(1)
 
+def save_keypair(keypair, privkeyfile):
+    passphrase = getpass.getpass('Enter a passphrase to protect the saved private key: ')
+    with open(privkeyfile, 'wb') as f:
+        f.write(keypair.export_key(format='PEM', passphrase=passphrase))
+
+
 def load_keypair(privkeyfile):
+    passphrase = getpass.getpass('Enter a passphrase to decode the saved private key: ')
     with open(privkeyfile, 'rb') as f:
         keypairstr = f.read()
     try:
-        return RSA.import_key(keypairstr)
+        return RSA.import_key(keypairstr, passphrase=passphrase)
     except ValueError:
         print('Error: Cannot import private key from file ' + privkeyfile)
         sys.exit(1)
