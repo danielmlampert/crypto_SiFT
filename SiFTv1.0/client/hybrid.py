@@ -26,17 +26,15 @@ def load_publickey(pubkeyfile):
         sys.exit(1)
 
 def save_keypair(keypair, privkeyfile):
-    passphrase = getpass.getpass('Enter a passphrase to protect the saved private key: ')
     with open(privkeyfile, 'wb') as f:
-        f.write(keypair.export_key(format='PEM', passphrase=passphrase))
+        f.write(keypair.export_key(format='PEM'))
 
 
 def load_keypair(privkeyfile):
-    passphrase = getpass.getpass('Enter a passphrase to decode the saved private key: ')
     with open(privkeyfile, 'rb') as f:
         keypairstr = f.read()
     try:
-        return RSA.import_key(keypairstr, passphrase=passphrase)
+        return RSA.import_key(keypairstr)
     except ValueError:
         print('Error: Cannot import private key from file ' + privkeyfile)
         sys.exit(1)
