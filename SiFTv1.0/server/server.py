@@ -10,7 +10,7 @@ class Server:
     def __init__(self):
         genKeypair()
         # ------------------------ CONFIG -----------------------------
-        self.server_usersfile = 'server/users.txt' 
+        self.server_usersfile = 'users.txt' 
         self.server_usersfile_coding = 'utf-8'
         self.server_usersfile_rec_delimiter = '\n'
         self.server_usersfile_fld_delimiter = ':'

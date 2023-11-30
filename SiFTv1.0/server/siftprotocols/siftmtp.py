@@ -15,7 +15,7 @@ class SiFT_MTP_Error(Exception):
 class SiFT_MTP:
 	def __init__(self, peer_socket):
 
-		self.DEBUG = True
+		self.DEBUG = False
 		# --------- CONSTANTS ------------
 		self.version_major = 0
 		self.version_minor = 5
@@ -44,8 +44,8 @@ class SiFT_MTP:
 		self.hdr_rsv = b'\x00\x00'
 		self.size_msg_mac = 12
 		self.size_msg_etk = 256
-		self.keypair_path = "server/keypair.pem"
-		self.publickey_path = "client/pubkey.pem"
+		self.keypair_path = "keypair.pem"
+		self.publickey_path = "../client/pubkey.pem"
 		# --------- STATE ------------
 		self.peer_socket = peer_socket
 		self.hdr_sqn_snd = b'\x00\x00'
